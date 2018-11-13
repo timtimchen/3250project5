@@ -20,6 +20,7 @@ public class ChatClient extends Application {
   private DataInputStream fromServer = null;
   // Text area to display contents
   private TextArea ta = new TextArea();
+  Socket socket;
 
   @Override // Override the start method in the Application class
   public void start(Stage primaryStage) {
@@ -27,12 +28,12 @@ public class ChatClient extends Application {
     List<String> list = params.getRaw();
     String userName = "";
     int portNumber;
-    if (list.size() > 1) {
+    if (list.size() >= 1) {
       userName = list.get(0);
     }
-    String disconnectStr = "disconnect " + userName;
+    String disconnectStr = "disconnect " + userName + "\n";
     String clientName = "Chat Client: " + userName;
-    if (list.size() > 2) {
+    if (list.size() >= 2) {
       portNumber = Integer.parseInt(list.get(1));
     } else {
       portNumber = 4688;
@@ -60,13 +61,15 @@ public class ChatClient extends Application {
 
     disconnectButton.setOnAction(e -> {
       try {
-        toServer.writeBytes(disconnectStr);
-        toServer.flush();
+        if (socket.isConnected()) {
+          toServer.writeBytes(disconnectStr);
+          toServer.flush();
+        }
       } catch (IOException ex) {
-        System.err.println("22" + ex);
+        System.err.println(ex);
       }
-      Stage stage = (Stage) disconnectButton.getScene().getWindow();
-      stage.close();
+//      Stage stage = (Stage) disconnectButton.getScene().getWindow();
+//      stage.close();
     });
     tf.setOnAction(e -> {
       try {
@@ -79,51 +82,46 @@ public class ChatClient extends Application {
         // Send the message to the server
         toServer.writeBytes(message);
         toServer.flush();
-
       } catch (IOException ex) {
-        System.err.println("11" + ex);
+        System.err.println(ex);
       }
     });
 
     // Create a socket to connect to the server
-    try (Socket socket = new Socket("localhost", portNumber)) {
+    try {
 
+      socket = new Socket("localhost", portNumber);
       // Create an input stream to receive data from the server
       fromServer = new DataInputStream(socket.getInputStream());
       // Create an output stream to send data to the server
       toServer = new DataOutputStream(socket.getOutputStream());
 
-      toServer.writeBytes("connect " + userName);
+      toServer.writeBytes("connect " + userName + "\n");
       toServer.flush();
     } catch (IOException ex) {
       ta.appendText(ex.toString() + '\n');
     }
 
-//    Thread thread = new Thread(new MessageReceiver());
-//    thread.start();
+    Thread thread = new Thread(new MessageReceiver());
+    thread.start();
   }
 
   private class MessageReceiver implements Runnable {
     public void run() {
       try {
-//        int length = fromServer.available();
-//        if (length > 0) {
-//          byte[] receiveBuf = new byte[length];
-//          fromServer.readFully(receiveBuf);
-//          synchronized (this) {
-//            for (byte b : receiveBuf) {
-//              ta.appendText(Character.toString((char)b));
-//            }
-//            ta.appendText("\n");
-//          }
-//        }
-        String received = fromServer.readUTF();
-          synchronized (this) {
-            ta.appendText(received);
-            ta.appendText("\n");
+        while (socket.isConnected()) {
+          int length = fromServer.available();
+          if (length > 0) {
+            byte[] receiveBuf = new byte[length];
+            fromServer.readFully(receiveBuf);
+            synchronized (this) {
+              for (byte b : receiveBuf) {
+                ta.appendText(Character.toString((char)b));
+              }
+              ta.appendText("\n");
+            }
           }
-
-
+        }
       } catch (IOException e) {
         synchronized (this) {
           ta.appendText(e.toString() + '\n');
